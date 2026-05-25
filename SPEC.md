@@ -133,13 +133,35 @@ This vector is the source of truth. If your implementation produces different by
 
 (Note: the original H33 Signing Substrate Spec v1 markdown contained a hex-encoding typo for the timestamp — it stated `0x00000195F3B28800`, which is not the BE encoding of `1744156800000`. The correct encoding is `0x0000019617D8B400`, used above. Spec v1.1 should correct the markdown.)
 
+## Production receipt vector (real-world PASS reference)
+
+A live receipt captured from H33's production substrate at
+`https://api.h33.ai/api/v1/substrate/attest` on 2026-05-26 is shipped at
+`tests/fixtures/real/production-anchor-2026-05-26.json`. It was minted with
+the deliberately-public input string `h33-verify v0.1 production test vector
+2026-05-26` and the `generic` computation type.
+
+The receipt's three load-bearing fields:
+
+- `substrate_hex` (58 bytes): `01fff6a298ea7a07d9a951f9e42fe3ba1e13615333df03375fee17d544b36fd93d180000019e61524dd37964a4fcd9c7c1ef7c7220b37efa331e`
+- `on_chain_hash` (32 bytes): `673c3412fa861f9a928761661ef1e6e4ee5eaf93da21516c5e0b3a7eee5416cc`
+- `receipt_hex`   (42 bytes): `012d26fc3f5b9a602ac67f116410005b9a42c9f6d7dac273cc1183c1e4137127a60000019e61524dd307`
+
+A correctly-implemented verifier MUST decode the substrate as
+`version=0x01, computation_type=GenericFhe, timestamp_ms=1779749244371,
+fhe_commitment=SHA3-256(declared input)`, and MUST find that
+`SHA3-256(substrate_hex)` equals `on_chain_hash` byte-for-byte.
+
+This is a public verification artifact, not a secret. Anyone can re-run the
+verifier locally against it.
+
 ## Test vector reproducibility
 
 ```
 $ git clone https://github.com/H33ai-postquantum/h33-verifier
 $ cd h33-verifier
 $ cargo test --release
-running 14 tests
+running 18 tests
 test canonical_kat_signing_message_is_stable ... ok
 test canonical_kat_substrate_layout         ... ok
 [...]

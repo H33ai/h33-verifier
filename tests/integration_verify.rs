@@ -184,3 +184,58 @@ fn signing_message_is_just_sha3_of_substrate() {
     let via_sha3 = sha3_256(&bytes);
     assert_eq!(via_signing_message, via_sha3);
 }
+
+/// PRODUCTION receipt captured 2026-05-26 from
+/// `POST https://api.h33.ai/api/v1/substrate/attest` with input data
+/// `"h33-verify v0.1 production test vector 2026-05-26"`. This vector is
+/// the load-bearing regression test for "real-world Mode 1 PASS" — if it
+/// ever breaks, either the substrate's wire format changed (would be a
+/// version-byte bump) or h33-verify's SHA3/decode diverged.
+///
+/// Source of truth: `tests/fixtures/real/production-anchor-2026-05-26.json`.
+/// Values inlined here so the test doesn't depend on filesystem layout.
+mod real_production_2026_05_26 {
+    use super::*;
+
+    const SUBSTRATE_HEX: &str = "01fff6a298ea7a07d9a951f9e42fe3ba1e13615333df03375fee17d544b36fd93d180000019e61524dd37964a4fcd9c7c1ef7c7220b37efa331e";
+    const ON_CHAIN_HEX: &str = "673c3412fa861f9a928761661ef1e6e4ee5eaf93da21516c5e0b3a7eee5416cc";
+    const RECEIPT_HEX: &str = "012d26fc3f5b9a602ac67f116410005b9a42c9f6d7dac273cc1183c1e4137127a60000019e61524dd307";
+    const INPUT_DATA: &[u8] = b"h33-verify v0.1 production test vector 2026-05-26";
+
+    #[test]
+    fn substrate_decodes_as_generic_fhe_v1() {
+        let bytes = hex::decode(SUBSTRATE_HEX).unwrap();
+        let view = decode_substrate(&bytes).expect("real production substrate must decode");
+        assert_eq!(view.version, 0x01);
+        assert_eq!(view.computation_type, ComputationType::GenericFhe);
+        assert_eq!(view.computation_type.name(), "GenericFhe");
+        // Timestamp 1779749244371 = 2026-05-25T22:47:24.371Z — sanity-check it's in our era.
+        assert_eq!(view.timestamp_ms, 1_779_749_244_371);
+    }
+
+    #[test]
+    fn signing_message_matches_on_chain_hash() {
+        // The Mode 1 verification core: SHA3-256(substrate_bytes) == on_chain_hash.
+        // This is THE check the verifier exists to perform; a real production
+        // receipt MUST satisfy it.
+        let substrate = hex::decode(SUBSTRATE_HEX).unwrap();
+        let on_chain = hex::decode(ON_CHAIN_HEX).unwrap();
+        let computed = signing_message(&substrate);
+        assert_eq!(computed[..], on_chain[..], "Mode 1 binding broken on real fixture");
+    }
+
+    #[test]
+    fn fhe_commitment_binds_to_public_input_data() {
+        // The substrate's fhe_commitment field (bytes 2..34) must equal
+        // SHA3-256 of the declared input data. This is what `--data` checks.
+        let bytes = hex::decode(SUBSTRATE_HEX).unwrap();
+        let view = decode_substrate(&bytes).unwrap();
+        let expected = sha3_256(INPUT_DATA);
+        assert_eq!(view.fhe_commitment, expected, "fhe_commitment != SHA3(declared input)");
+    }
+
+    #[test]
+    fn receipt_is_42_bytes() {
+        assert_eq!(hex::decode(RECEIPT_HEX).unwrap().len(), 42);
+    }
+}

@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "source": "Production substrate at https://api.h33.ai/api/v1/substrate/attest",
+    "captured_at_utc": "2026-05-26",
+    "captured_via": "SSM session to auth1-delivery-rs i-0f64d17ee49b88a6f; key sourced from systemd Environment, never echoed to stdout",
+    "purpose": "Public verification fixture — proves h33-verify v0.1 PASSes against a live H33 production receipt.",
+    "input_data": "h33-verify v0.1 production test vector 2026-05-26",
+    "input_data_length_bytes": 49,
+    "computation_type": "generic (GenericFhe = 0xFF)",
+    "ephemeral_signatures_bytes": 21051,
+    "compression_ratio": "284x",
+    "verified_by_substrate_at_attest_time": true,
+    "redacted": "None — this fixture contains only public verification material. No API keys, no bearer tokens, no secrets."
+  },
+  "on_chain_hash": "673c3412fa861f9a928761661ef1e6e4ee5eaf93da21516c5e0b3a7eee5416cc",
+  "receipt_hex":   "012d26fc3f5b9a602ac67f116410005b9a42c9f6d7dac273cc1183c1e4137127a60000019e61524dd307",
+  "substrate_hex": "01fff6a298ea7a07d9a951f9e42fe3ba1e13615333df03375fee17d544b36fd93d180000019e61524dd37964a4fcd9c7c1ef7c7220b37efa331e"
+}

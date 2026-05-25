@@ -102,6 +102,21 @@ Other fields (timestamps, algorithm metadata, comments) are ignored.
 
 The verifier prints both lists in every report. This honesty is by design — verifiers that overclaim are worse than ones that don't exist.
 
+## Try it against a real production receipt
+
+The repo ships with a real receipt captured from H33's production substrate at `api.h33.ai`:
+
+```
+$ h33-verify verify tests/fixtures/real/production-anchor-2026-05-26.json
+{ "verdict": "PASS", ... }
+
+$ h33-verify verify tests/fixtures/real/production-anchor-2026-05-26.json \
+    --data    tests/fixtures/real/production-anchor-2026-05-26.input
+{ "verdict": "PASS", "optional_data_check": { "fhe_commitment_matches": true, ... } }
+```
+
+This fixture is a *public verification artifact*, not a secret — it contains only the substrate hex, the on-chain SHA3, the compact receipt, and the deliberately-public input string used to mint it. Captured by curl to `POST /api/v1/substrate/attest` with `{"data": "h33-verify v0.1 production test vector 2026-05-26", "type": "generic"}`. Any third party can re-run the verifier locally, decode the substrate, recompute SHA3, and reach the same PASS verdict without trusting H33's infrastructure for anything beyond the SHA3-256 standard itself.
+
 ## Specification
 
 See [SPEC.md](./SPEC.md) for the input/output schemas, exit codes, KAT vector, and stability commitments.
