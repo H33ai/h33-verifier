@@ -1,0 +1,13 @@
+{
+  "_comment": "PARSER-ONLY fixture. Sourced verbatim from scif-backend src/api/substrate_anchor.rs::tests::attest_response_parses (a JSON-deserialization unit test). The on_chain_hash and substrate_hex were chosen by the test author to be plausible-shaped 32- and 58-byte values respectively, NOT to be a cryptographically valid pair. Running `h33-verify verify` against this fixture will correctly FAIL the deterministic signing_message check — that failure is the verifier doing its job.",
+  "_use_for": [
+    "Confirm h33-verify decodes a structurally valid substrate (version, computation_type, all field offsets).",
+    "Confirm h33-verify catches a synthetic/forged receipt where on_chain_hash != SHA3-256(substrate_hex)."
+  ],
+  "_do_not_use_for": [
+    "Asserting that on_chain_hash matches the substrate (it does not, by construction)."
+  ],
+  "on_chain_hash": "91f55fd1fa55d2c675c0def6f0892a3cd86c9495fe3b23348537f1b86e9aa429",
+  "receipt_hex": "012bbec6a8d4e63c1cbcaba59a17ef7ca62024c3f1ab455bc6c6755baaad009a550000019d79e6101407",
+  "substrate_hex": "01ff42012470e20e90036b3098da71e1056ce0e561031bc41fa47faa1d1269f93a2e0000019d79bbe68283f8aeddabbcae0279787de9a7fdbd9d"
+}
