@@ -177,10 +177,143 @@ Every test in `tests/integration_verify.rs` is a deterministic conformance asser
 - The KAT signing_message hex is frozen forever — it is the cross-language interoperability anchor.
 - The 6 deterministic check names (`substrate_decodes`, `version_byte_v1`, `computation_type_recognized`, `signing_message_matches_on_chain_hash`, `receipt_length_42`, `on_chain_hash_length_32`) are stable contract.
 
+## Signed Verification Reports (v0.2)
+
+`h33-verify` can wrap any verification verdict in an Ed25519-signed
+envelope so the verdict itself becomes an attestable, portable artifact.
+This section specifies the wire format.
+
+### Format tag
+
+The signed report MUST contain a top-level field:
+
+```json
+"report_format": "h33-verify-signed-report-v1"
+```
+
+Any conforming verifier MUST refuse to verify a report whose `report_format`
+is not exactly `"h33-verify-signed-report-v1"`. Future versions will use
+distinct tags (`...-v2`, `...-v3`) so old verifiers fail fast rather than
+mis-interpret newer reports.
+
+### Field set (v1)
+
+A v1 signed report is a JSON object with exactly these top-level fields
+(presence required unless noted):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `report_format` | string | Always `"h33-verify-signed-report-v1"`. |
+| `verifier` | object | Identity + version of the verifier instance that produced the report. |
+| `verified_at_utc` | string | ISO 8601 UTC timestamp with millisecond precision (e.g. `"2026-05-26T00:57:24.939Z"`). |
+| `receipt_input` | object | Links this report to a specific input receipt (see below). |
+| `input_receipt_path` | string | Where the verifier read the receipt from (informational only — not load-bearing for verification). |
+| `deterministic_checks` | object | The six v1 Mode-1 checks. |
+| `decoded_substrate` | object \| null | Decoded substrate fields, when decoding succeeded; `null` otherwise. |
+| `optional_data_check` | object \| null | Optional FHE-binding check; `null` when `--data` was not used. |
+| `verdict` | string | `"PASS"` or `"FAIL"`. |
+| `what_was_proven` | array of strings | What the verifier asserts. |
+| `what_was_not_proven` | array of strings | What the verifier explicitly does NOT assert. |
+| `signature` | object | The Ed25519 signature (see below). |
+
+The `verifier` object MUST contain:
+
+| Subfield | Type | Description |
+|----------|------|-------------|
+| `name` | string | Always `"h33-verify"` for this implementation. |
+| `version` | string | Crate version of the verifier that produced the report. |
+| `spec_version` | string | The substrate spec version this verifier targets. |
+| `deterministic` | bool | Always `true` for v0.x. |
+| `network_required` | bool | Always `false` for v0.x. |
+| `instance_public_key` | string | 32-byte Ed25519 public key, hex-encoded (64 chars). |
+| `fingerprint` | string | First 8 bytes of `SHA3-256(instance_public_key)`, hex-encoded (16 chars). |
+
+The `receipt_input` object MUST contain:
+
+| Subfield | Type | Description |
+|----------|------|-------------|
+| `on_chain_hash` | string | The 32-byte on-chain hash hex from the input receipt, trimmed. |
+| `receipt_input_sha3_256` | string | `SHA3-256` over a canonical encoding of `{"on_chain_hash":..., "receipt_hex":..., "substrate_hex":...}` (each trimmed). 32 bytes hex. Ties the report to a specific receipt independent of source-file whitespace or extra fields. |
+
+The `signature` object MUST contain:
+
+| Subfield | Type | Description |
+|----------|------|-------------|
+| `algorithm` | string | Always `"ed25519"` for v1. |
+| `value_hex` | string | 64-byte Ed25519 signature, hex-encoded (128 chars). |
+
+### Canonical encoding (for signing and verification)
+
+The signature is computed over a deterministic byte string derived from
+the report's "unsigned body" — every field listed above EXCEPT
+`signature`. The canonical encoding rules are:
+
+1. **Object members sorted lexicographically by key** (byte-wise on UTF-8).
+2. **No whitespace anywhere** — no spaces, tabs, or newlines between tokens.
+3. **Strings escaped per RFC 8259 §7**, minimal form. `\"`, `\\`, `\b`,
+   `\f`, `\n`, `\r`, `\t`, and `\uXXXX` for control characters below `0x20`.
+   The optional `/` escape is NOT used.
+4. **Numbers are integers**, emitted in shortest decimal form, no leading
+   zeros, no trailing zeros, no exponent. Floating-point numbers are not
+   used anywhere in the v1 report schema.
+5. `true`, `false`, `null` are the keywords.
+
+### Signing procedure
+
+1. Build the unsigned body as a JSON Value with all fields except `signature`.
+2. Canonical-encode it to bytes per the rules above.
+3. Compute `message_hash = SHA3-256(canonical_bytes)`.
+4. Sign: `signature_bytes = Ed25519_sign(secret_key, message_hash)`.
+5. Attach `{"algorithm": "ed25519", "value_hex": hex(signature_bytes)}` as the `signature` field.
+
+### Verification procedure
+
+1. Parse the JSON. Reject if `report_format != "h33-verify-signed-report-v1"`.
+2. Extract and remove the `signature` field. Reject if missing.
+3. Reject if `signature.algorithm != "ed25519"`.
+4. Hex-decode `signature.value_hex` (must yield 64 bytes).
+5. Extract `verifier.instance_public_key` and hex-decode (must yield 32 bytes).
+6. Recompute the fingerprint as `hex(SHA3-256(public_key)[..8])` and check it
+   matches the report's `verifier.fingerprint`. (This is a sanity check, not
+   a security boundary — the actual security boundary is the signature.)
+7. Canonical-encode the unsigned body (the report minus `signature`) per the rules above.
+8. Compute `message_hash = SHA3-256(canonical_bytes)`.
+9. Ed25519-verify: `verify(public_key, message_hash, signature_bytes)`.
+10. If all checks pass → the report is genuine; the `verdict` field
+    represents what the verifier instance with that public key actually
+    claimed.
+
+### What a verified signature proves (and does not prove)
+
+A verified signature proves:
+
+- The signed report has not been mutated since it was signed.
+- The Ed25519 public key embedded in the report signed *this exact*
+  verdict-plus-context tuple.
+- The verifier instance with that public key claimed `verdict` over the
+  receipt identified by `receipt_input.receipt_input_sha3_256`.
+
+It does **not** prove:
+
+- Whether the consumer should trust the verifier instance. That is an
+  out-of-band relationship (fingerprint comparison, key directory, known-
+  instance list). The signature is the chain-of-custody primitive;
+  identity establishment lives one layer above.
+- Whether the original receipt the report attests is itself authentic.
+  The report's `deterministic_checks` answer the Mode 1 question, and v0.3
+  Mode 2 PQ-signature verification answers the "binds to H33" question.
+
+### Backward compatibility
+
+Plain `h33-verify verify` (without `--signed-report`) continues to emit the
+v0.1 unsigned report format unchanged. Existing v0.1 consumers do not have
+to upgrade unless they want the signed-envelope semantics.
+
 ## Versioning
 
 | h33-verify version | H33 Signing Substrate Spec | Notes |
 |--------------------|---------------------------|-------|
-| 0.1.x              | v1                        | Mode 1 deterministic verification only. No PQ signature check. |
-| 0.2.x (planned)    | v1                        | Adds Mode 2 — fetches ephemeral signature bundles, verifies Dilithium + FALCON + SPHINCS+ signatures over `signing_message`. Optional network dep. |
-| 1.0.x (planned)    | v1                        | Stable surface for ecosystem use. Includes SDK bindings in TypeScript and Python. |
+| 0.1.x              | v1                        | Mode 1 deterministic verification only. No PQ signature check, no signed reports. |
+| 0.2.x              | v1                        | Adds Ed25519-signed verification reports. Mode 1 only on the receipt side. |
+| 0.3.x (planned)    | v1                        | Adds Mode 2 — accepts user-supplied PQ signature bundle + epoch public keys, verifies Dilithium + FALCON + SPHINCS+ offline. Hybrid Ed25519+ML-DSA verifier signing co-lands. |
+| 1.0.x (planned)    | v1                        | Stable surface for ecosystem use. SDK bindings in TypeScript and Python. |
