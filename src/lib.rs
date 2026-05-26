@@ -1,9 +1,9 @@
 //! H33-74 offline verifier — substrate reconstruction + deterministic
-//! commitment binding verification.
+//! commitment binding verification, plus (v0.2) verifier-signed reports.
 //!
 //! Implements the H33 Signing Substrate Specification v1 in pure Rust against
-//! only `sha3` from RustCrypto. No dependency on the proprietary
-//! `h33-substrate` crate — the spec is the contract.
+//! only `sha3` from RustCrypto + Ed25519 for report signing. No dependency
+//! on the proprietary `h33-substrate` crate — the spec is the contract.
 //!
 //! # What this proves (Mode 1)
 //!
@@ -13,15 +13,25 @@
 //!
 //! # What this does NOT prove (Mode 1)
 //!
-//! - PQ signature validity (Dilithium / FALCON / SPHINCS+) — would require
-//!   fetching the 21KB ephemeral bundle from H33 Cachee + H33's published
-//!   PQ public keys for that key-gen epoch. Mode 2 in v0.2.
+//! - PQ signature validity (Dilithium / FALCON / SPHINCS+). Mode 2 in v0.3.
 //! - Authenticity of the entity that issued the receipt.
 //! - Truth of the FHE computation that produced the `fhe_commitment`.
 //!
-//! See SPEC.md for the byte layout being verified against.
+//! # v0.2 addition: signed verification reports
+//!
+//! The library also exposes `produce_signed_report` and
+//! `verify_signed_report` so the verifier's verdict itself becomes an
+//! attestable artifact. Per-instance Ed25519 keypair; canonical JSON
+//! encoding for byte-exact reproducibility across implementations.
+//!
+//! See SPEC.md for the substrate layout and the signed-report contract.
 
 use sha3::{Digest, Sha3_256};
+
+pub mod canonical;
+pub mod identity;
+pub mod report;
+pub mod signed_report;
 
 pub const SUBSTRATE_VERSION: u8 = 0x01;
 pub const SUBSTRATE_SIZE: usize = 58;
@@ -171,4 +181,43 @@ pub fn sha3_256(data: &[u8]) -> [u8; 32] {
     let mut h = Sha3_256::new();
     h.update(data);
     h.finalize().into()
+}
+
+/// ISO 8601 UTC timestamp for the current moment. Stdlib only.
+/// Returns e.g. `"2026-05-26T22:31:14.123Z"`.
+pub fn iso8601_now() -> String {
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    iso8601_from_unix_ms(ms)
+}
+
+/// ISO 8601 UTC formatting of a millisecond Unix timestamp. Stdlib only.
+///
+/// Uses the Howard Hinnant civil-from-days algorithm (paraphrased) so we
+/// don't pull in chrono / time for a single date format.
+pub fn iso8601_from_unix_ms(ms: u64) -> String {
+    let secs = ms / 1000;
+    let millis_part = ms % 1000;
+
+    let z = (secs / 86400) as i64 + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    let hours = (secs % 86400) / 3600;
+    let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
+
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        y, m, d, hours, minutes, seconds, millis_part
+    )
 }

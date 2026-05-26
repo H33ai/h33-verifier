@@ -98,6 +98,68 @@ Under Mode 1 alone: nothing — Mode 1 does not check issuer. The attacker would
 
 Under Mode 2 (v0.2): the attacker would have to forge three independent post-quantum signatures (Dilithium ML-DSA-65, FALCON-512, SPHINCS+-SHA2-128f) over the substrate's `signing_message`, all against H33's published public keys for the relevant epoch. Breaking that requires simultaneous breaks of MLWE lattices, NTRU lattices, and stateless hash signatures — three independent mathematical bets.
 
+## v0.2 addition: signed verification reports
+
+v0.2 adds an Ed25519 signing layer over the v0.1 verdict so the report
+itself becomes a portable, attestable artifact. The threat model for that
+layer:
+
+### What the signed-report layer detects
+
+| Threat | How |
+|--------|-----|
+| Verdict mutation after signing | canonical-encoding + SHA3 + Ed25519 verify all fail closed |
+| Receipt-input swap (same verifier signs a different receipt and claims it was this one) | `receipt_input.receipt_input_sha3_256` is over the canonical (`on_chain_hash`, `receipt_hex`, `substrate_hex`) tuple; tampering yields a sig fail |
+| Substituted verifier identity | `verifier.fingerprint` must equal `SHA3-256(instance_public_key)[..8]`; mismatch → reject |
+| Algorithm-downgrade attempt | `signature.algorithm != "ed25519"` → reject |
+| Format-version drift | `report_format != "h33-verify-signed-report-v1"` → reject |
+
+### What the signed-report layer does NOT detect
+
+- **Whether the verifier instance is trustworthy.** Anyone can generate an
+  Ed25519 keypair and sign a report. The signature proves "this key
+  signed this verdict" — not "this key is one you should trust." Trust
+  establishment is out-of-band (fingerprint comparison, key directory,
+  known-instance list, custom CA chain).
+- **Whether the verifier code itself was tampered with at runtime.** A
+  modified verifier binary could sign a fabricated verdict over an
+  unrelated receipt. Defense: build from pinned source against the public
+  KAT vector, then sign with a hardware-backed key.
+- **Compromise of the identity file.** The identity file is written 0600
+  but otherwise has no hardware backing in v0.2. If an attacker gains
+  read access to the file, they can sign arbitrary reports as that
+  verifier instance. Treat the identity file like any other long-lived
+  signing key.
+
+### Trust assumptions added by v0.2
+
+Running `h33-verify verify --signed-report` adds these to the v0.1 list:
+
+1. **Ed25519 itself.** Used per RFC 8032; pure-Rust implementation via
+   `ed25519-dalek`, audited and widely deployed. If Ed25519 is broken,
+   this layer fails (and so does much of the modern public-key
+   ecosystem).
+2. **`ed25519-dalek` and `rand_core` crates.** Audit the dependency tree
+   if your threat model includes supply-chain compromise.
+3. **Local OS entropy.** Keypair generation uses `OsRng`; if your kernel
+   RNG is compromised, keys are predictable. Standard concern.
+
+### Rotation guidance
+
+`h33-verify keygen --force` rotates the keypair, breaking trust
+relationships established with the prior public key. Consumers who
+trusted the old key must re-establish trust with the new one
+out-of-band. Use rotation when:
+
+- The identity file is suspected to be compromised.
+- The verifier instance is being transferred to a new operator.
+- A documented operational lifecycle says it's time.
+
+There is no automatic rotation in v0.2.
+
 ## Document scope
 
-This threat model covers `h33-verify` v0.1.x only. It will be updated when v0.2 (Mode 2) lands, and again on each major version. See [BOUNDARY.md](./BOUNDARY.md) for the public-vs-proprietary surface delineation.
+This threat model covers `h33-verify` v0.1.x + v0.2.x. It will be updated
+when v0.3 (Mode 2 PQ verification of input + hybrid PQ verifier signing)
+lands, and again on each major version. See [BOUNDARY.md](./BOUNDARY.md)
+for the public-vs-proprietary surface delineation.

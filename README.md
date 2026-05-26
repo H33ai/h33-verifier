@@ -29,7 +29,7 @@ H33-74 receipts only matter if anyone — your auditor, your insurer, your regul
 
 It is intentionally minimal:
 
-- Five dependencies (`sha3`, `clap`, `serde`, `serde_json`, `hex`).
+- Seven dependencies (`sha3`, `clap`, `serde`, `serde_json`, `hex`, `ed25519-dalek`, `rand_core` — the last two added in v0.2 for signed-report support).
 - Single static binary, tiny, auditable.
 - JSON-first output, machine-readable by default.
 - Tells you honestly what it proved — and what it did *not* prove.
@@ -74,6 +74,36 @@ h33-verify inspect ./receipt.json
 ```
 
 Just decodes the 58-byte substrate and prints its fields. Useful for debugging or for archival summaries.
+
+### Signed verification reports (v0.2)
+
+Make the verdict itself an attestable artifact — a regulator-grade chain-of-custody record signed by the verifier instance:
+
+```
+# One-time: generate this verifier instance's Ed25519 keypair
+h33-verify keygen
+
+# Show this instance's public key + fingerprint
+h33-verify identity
+
+# Verify a receipt AND sign the verdict with this instance's key
+h33-verify verify ./receipt.json --signed-report > attested.json
+
+# Verify a signed report later (anyone, anywhere, no network)
+h33-verify verify-report ./attested.json
+```
+
+`attested.json` includes:
+
+- the full v0.1 verdict (`deterministic_checks`, `decoded_substrate`, `verdict`, etc.)
+- a `verified_at_utc` timestamp
+- a `receipt_input` block linking the report to a specific receipt by SHA3-256 of its three canonical fields
+- the verifier instance's public key + fingerprint
+- an Ed25519 signature over a canonical JSON encoding of all the above
+
+Tamper any field — the verdict, the timestamp, the public key, anything — and `verify-report` returns a signature failure with a clear error message.
+
+The verifier identity is persisted at `$H33_VERIFY_IDENTITY` if set, else `$XDG_CONFIG_HOME/h33-verify/identity.json`, else `$HOME/.config/h33-verify/identity.json`. The file is written with mode `0600`. Per-instance keypairs are intentional — each running verifier is its own attestable entity, so a signed report tells the consumer *which verifier ran the check* separate from the entity whose receipts are being checked. Consumers establish trust in a verifier instance's public key out-of-band (key directory, fingerprint comparison, known-instance list).
 
 ## Receipt format
 
