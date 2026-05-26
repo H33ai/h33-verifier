@@ -125,6 +125,12 @@ See [SPEC.md](./SPEC.md) for the input/output schemas, exit codes, KAT vector, a
 
 The H33 Signing Substrate Specification v1 itself is published with the H33 substrate crate.
 
+## Security, threat model, public/proprietary boundary
+
+- [SECURITY.md](./SECURITY.md) — how to report a vulnerability, what's in scope, disclosure timeline.
+- [THREAT_MODEL.md](./THREAT_MODEL.md) — what the verifier detects, what it explicitly does not, and the trust assumptions a user inherits.
+- [BOUNDARY.md](./BOUNDARY.md) — what's public (this verifier, the spec, receipts, replay tooling, SDKs) vs proprietary (signing pipeline, FHE engines, STARK provers, orchestration, infrastructure). The principle: **verification is public, computation is proprietary.**
+
 ## License
 
 Apache-2.0. Permissive on purpose — anyone who wants to build a competing verifier should be able to start from this one.
