@@ -5,7 +5,7 @@ edition = "2021"
 description = "Independent offline verifier for H33-74 substrate receipts. Reconstructs the 58-byte substrate per H33 Signing Substrate Spec v1, recomputes SHA3-256, and compares to the claimed on-chain hash. No network. No H33 dependency. Just SHA3 + the published spec."
 authors = ["H33 / community"]
 license = "Apache-2.0"
-repository = "https://github.com/H33ai-postquantum/h33-verifier"
+repository = "https://github.com/H33ai/h33-verifier"
 readme = "README.md"
 rust-version = "1.75"
 

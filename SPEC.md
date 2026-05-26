@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`h33-verify` is an independent, offline, deterministic verifier for H33-74 substrate receipts. It performs **Mode 1 verification** (commitment-binding) against the [H33 Signing Substrate Specification v1](https://github.com/H33ai-postquantum/h33-substrate-spec).
+`h33-verify` is an independent, offline, deterministic verifier for H33-74 substrate receipts. It performs **Mode 1 verification** (commitment-binding) against the H33 Signing Substrate Specification v1.
 
 This document defines:
 
@@ -158,7 +158,7 @@ verifier locally against it.
 ## Test vector reproducibility
 
 ```
-$ git clone https://github.com/H33ai-postquantum/h33-verifier
+$ git clone https://github.com/H33ai/h33-verifier
 $ cd h33-verifier
 $ cargo test --release
 running 18 tests

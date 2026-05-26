@@ -19,6 +19,8 @@ $ h33-verify verify ./receipt.json
 
 Given a 74-byte H33 substrate receipt (32 bytes on-chain + 42 bytes compact), `h33-verify` reconstructs the 58-byte substrate, recomputes `SHA3-256`, and checks that it equals the receipt's claimed on-chain hash.
 
+> **Relationship to `h33-replay-verify`:** `h33-verify` validates individual H33-74 receipt commitments. `h33-replay-verify` (separate tool) validates full replay bundles: actions, proofs, frames, continuity roots, and case-level consistency. Use this tool when you have a single receipt; use `h33-replay-verify` when you have a full case replay.
+
 No network. No daemon. No config. No H33 dependency. Just SHA3 and the [published spec](./SPEC.md).
 
 ## Why it exists
@@ -35,13 +37,13 @@ It is intentionally minimal:
 ## Install
 
 ```
-cargo install --git https://github.com/H33ai-postquantum/h33-verifier
+cargo install --git https://github.com/H33ai/h33-verifier
 ```
 
 Or build from source:
 
 ```
-git clone https://github.com/H33ai-postquantum/h33-verifier
+git clone https://github.com/H33ai/h33-verifier
 cd h33-verifier
 cargo build --release
 ./target/release/h33-verify --help
@@ -121,7 +123,7 @@ This fixture is a *public verification artifact*, not a secret — it contains o
 
 See [SPEC.md](./SPEC.md) for the input/output schemas, exit codes, KAT vector, and stability commitments.
 
-The H33 Signing Substrate Specification v1 itself is at <https://github.com/H33ai-postquantum/h33-substrate-spec>.
+The H33 Signing Substrate Specification v1 itself is published with the H33 substrate crate.
 
 ## License
 
