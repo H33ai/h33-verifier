@@ -28,8 +28,12 @@
 
 use sha3::{Digest, Sha3_256};
 
+pub mod bundle;
 pub mod canonical;
 pub mod identity;
+pub mod mode2;
+pub mod pq;
+pub mod pubkeys;
 pub mod report;
 pub mod signed_report;
 

@@ -9,6 +9,7 @@
 //! definition of "what the verifier checks and what it says." The signed
 //! envelope is purely a transport layer; it does not change verdicts.
 
+use crate::mode2::Mode2Report;
 use crate::{decode_substrate, sha3_256, signing_message, SubstrateView, RECEIPT_SIZE};
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +68,9 @@ pub struct VerificationReport {
     pub deterministic_checks: DeterministicChecks,
     pub decoded_substrate: Option<DecodedSubstrate>,
     pub optional_data_check: Option<OptionalDataCheck>,
+    /// Mode 2 (PQ signature verification) outcome. `None` if `--bundle` /
+    /// `--pubkeys` were not supplied — the verifier ran in Mode 1 only.
+    pub mode_2_check: Option<Mode2Report>,
     pub verdict: String,
     pub what_was_proven: Vec<&'static str>,
     pub what_was_not_proven: Vec<&'static str>,
@@ -92,6 +96,10 @@ pub struct VerifyInput<'a> {
     pub substrate_bytes: &'a [u8],
     /// Optional payload to check `SHA3(payload) == substrate.fhe_commitment`.
     pub data: Option<(&'a [u8], String)>, // (bytes, path-for-display)
+    /// Optional Mode 2 inputs — bundle bytes and pubkeys JSON. When
+    /// supplied, the verifier additionally checks the three PQ signatures.
+    /// Both must be present together; the CLI rejects asymmetric usage.
+    pub mode2: Option<(&'a [u8], &'a str)>,
 }
 
 /// Run Mode 1 verification and return the report.
@@ -145,10 +153,41 @@ pub fn verify_receipt(input: &VerifyInput<'_>) -> VerificationReport {
         .map(|c| c.fhe_commitment_matches)
         .unwrap_or(true);
 
-    let verdict = if all_deterministic_ok && optional_ok {
+    // Mode 2 — if --bundle and --pubkeys were supplied, run the PQ
+    // verification suite. The Mode 2 verdict is independent of Mode 1; both
+    // must PASS for the overall verdict to be PASS.
+    let mode_2_check = input.mode2.as_ref().and_then(|(bundle_bytes, pubkeys_json)| {
+        // Pass the actual on_chain_hash from the receipt; Mode 2 confirms
+        // the bundle's embedded signing_message links to this hash.
+        let mut oc_32 = [0u8; 32];
+        if on_chain_hash_length_32 {
+            oc_32.copy_from_slice(input.on_chain_hash);
+            Some(crate::mode2::run_mode2(bundle_bytes, pubkeys_json, &oc_32))
+        } else {
+            None
+        }
+    });
+    let mode_2_ok = mode_2_check
+        .as_ref()
+        .map(|r| r.verdict == "PASS")
+        .unwrap_or(true); // No Mode 2 requested → not a blocking gate.
+
+    let verdict = if all_deterministic_ok && optional_ok && mode_2_ok {
         "PASS"
     } else {
         "FAIL"
+    };
+
+    // Mode 2 changes what's proven vs not-proven. When Mode 2 PASSes, the
+    // "binds to H33" claim moves from "not proven" to "proven."
+    let (what_was_proven, what_was_not_proven) = if mode_2_check
+        .as_ref()
+        .map(|r| r.verdict == "PASS")
+        .unwrap_or(false)
+    {
+        (PROVEN_LIST_WITH_MODE_2.to_vec(), NOT_PROVEN_LIST_WITH_MODE_2.to_vec())
+    } else {
+        (PROVEN_LIST.to_vec(), NOT_PROVEN_LIST.to_vec())
     };
 
     VerificationReport {
@@ -165,8 +204,26 @@ pub fn verify_receipt(input: &VerifyInput<'_>) -> VerificationReport {
         },
         decoded_substrate,
         optional_data_check,
+        mode_2_check,
         verdict: verdict.to_string(),
-        what_was_proven: PROVEN_LIST.to_vec(),
-        what_was_not_proven: NOT_PROVEN_LIST.to_vec(),
+        what_was_proven,
+        what_was_not_proven,
     }
 }
+
+pub const PROVEN_LIST_WITH_MODE_2: &[&str] = &[
+    "Substrate bytes decode to a structurally valid v1 H33-74 substrate layout (58 bytes, version 0x01, recognized computation_type).",
+    "SHA3-256(substrate_bytes) equals the claimed on_chain_hash byte-for-byte.",
+    "Receipt buffer is the canonical 42-byte compact format.",
+    "Mode 2: ML-DSA-65 signature in the supplied bundle opens to signing_message under the supplied dilithium public key.",
+    "Mode 2: FALCON-512 signature in the supplied bundle opens to signing_message under the supplied falcon public key.",
+    "Mode 2: SPHINCS+-SHA2-128f-simple signature in the supplied bundle opens to signing_message under the supplied sphincs public key.",
+    "Mode 2: Bundle's signing_message equals the receipt's on_chain_hash — the bundle is for THIS receipt and no other.",
+    "Mode 2: The receipt is bound to all three NIST hardness assumptions (module lattices + NTRU lattices + stateless hash signatures) simultaneously. Forgery requires breaking all three.",
+];
+
+pub const NOT_PROVEN_LIST_WITH_MODE_2: &[&str] = &[
+    "Whether the entity that holds the dilithium/falcon/sphincs secret keys is actually H33. The verifier consumed the public keys you supplied; trust in those keys (e.g. that they came from H33's signed key directory for the relevant epoch) is an out-of-band relationship.",
+    "Truth of the FHE computation that produced fhe_commitment — the substrate commits to a hash, not to the semantic correctness of the computation.",
+    "Liveness or recency — a valid receipt + valid bundle remain valid forever under Mode 2. Replay-resistance is an application-layer concern.",
+];

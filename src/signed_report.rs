@@ -145,6 +145,7 @@ fn build_unsigned_body(
     let det = serde_json::to_value(&report.deterministic_checks).expect("checks always serialize");
     let decoded = serde_json::to_value(&report.decoded_substrate).expect("decoded always serializes");
     let optional = serde_json::to_value(&report.optional_data_check).expect("optional always serializes");
+    let mode_2 = serde_json::to_value(&report.mode_2_check).expect("mode_2 always serializes");
 
     let mut top = Map::new();
     top.insert("report_format".into(), Value::String(REPORT_FORMAT_TAG.into()));
@@ -155,6 +156,7 @@ fn build_unsigned_body(
     top.insert("deterministic_checks".into(), det);
     top.insert("decoded_substrate".into(), decoded);
     top.insert("optional_data_check".into(), optional);
+    top.insert("mode_2_check".into(), mode_2);
     top.insert("verdict".into(), Value::String(report.verdict.clone()));
     top.insert("what_was_proven".into(), Value::Array(proven));
     top.insert("what_was_not_proven".into(), Value::Array(not_proven));
@@ -363,6 +365,7 @@ mod tests {
             receipt_bytes: &receipt,
             substrate_bytes: &substrate,
             data: None,
+            mode2: None,
         };
         let report = verify_receipt(&input);
         assert_eq!(report.verdict, "PASS");
@@ -387,6 +390,7 @@ mod tests {
             receipt_bytes: &receipt,
             substrate_bytes: &substrate,
             data: None,
+            mode2: None,
         };
         let report = verify_receipt(&input);
         let identity = Identity::generate();
@@ -407,6 +411,7 @@ mod tests {
             receipt_bytes: &receipt,
             substrate_bytes: &substrate,
             data: None,
+            mode2: None,
         };
         let report = verify_receipt(&input);
         let identity = Identity::generate();
@@ -441,6 +446,7 @@ mod tests {
             receipt_bytes: &receipt,
             substrate_bytes: &substrate,
             data: None,
+            mode2: None,
         };
         let report = verify_receipt(&input);
         assert_eq!(report.verdict, "FAIL");

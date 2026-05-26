@@ -29,8 +29,8 @@ H33-74 receipts only matter if anyone — your auditor, your insurer, your regul
 
 It is intentionally minimal:
 
-- Seven dependencies (`sha3`, `clap`, `serde`, `serde_json`, `hex`, `ed25519-dalek`, `rand_core` — the last two added in v0.2 for signed-report support).
-- Single static binary, tiny, auditable.
+- Eleven dependencies in v0.3 (`sha3`, `clap`, `serde`, `serde_json`, `hex`, `ed25519-dalek`, `rand_core`, `pqcrypto-mldsa`, `pqcrypto-falcon`, `pqcrypto-sphincsplus`, `pqcrypto-traits`). The four pqcrypto crates carry NIST-finalized PQ signature verification; same crate versions as the production substrate signer.
+- Single binary, auditable.
 - JSON-first output, machine-readable by default.
 - Tells you honestly what it proved — and what it did *not* prove.
 
@@ -74,6 +74,34 @@ h33-verify inspect ./receipt.json
 ```
 
 Just decodes the 58-byte substrate and prints its fields. Useful for debugging or for archival summaries.
+
+### Mode 2 — offline PQ signature verification (v0.3)
+
+The receipt's `on_chain_hash` is a commitment over a 58-byte substrate. The substrate's signing_message is signed by H33 with three independent post-quantum algorithms (ML-DSA-65, FALCON-512, SPHINCS+-SHA2-128f-simple). Mode 2 lets anyone verify those three signatures locally:
+
+```
+# Mode 1 only (default — backwards compatible)
+h33-verify verify ./receipt.json
+
+# Mode 1 + Mode 2 — also opens the three PQ signatures
+h33-verify verify ./receipt.json \
+    --bundle  ./bundle.bin \
+    --pubkeys ./pubkeys-2026-04-11.json
+```
+
+`--bundle` and `--pubkeys` must be supplied together. One without the other is a hard error.
+
+Inputs are user-supplied files — no network call, no H33 trust. The verifier crate has zero runtime dependency on H33 infrastructure. The bundle comes from `GET /api/v1/substrate/attestations/:id/bundle` on the substrate (content-addressable via the `bundle_hash` returned alongside the `/attest` response). The pubkeys file is published by H33 per key-generation epoch. Both are public verification material with no embedded secrets.
+
+A Mode 2 PASS adds three new things to what the report proves:
+- The ML-DSA-65 signature in the bundle opens to the receipt's signing_message under the dilithium public key you supplied.
+- Same for FALCON-512 under the falcon public key.
+- Same for SPHINCS+-SHA2-128f-simple under the sphincs public key.
+- The bundle's embedded signing_message equals the receipt's on_chain_hash — the bundle is for *this* receipt and no other.
+
+Forgery requires simultaneously breaking all three NIST-finalized hardness assumptions (module lattices, NTRU lattices, and stateless hash signatures). This is the "binds to H33" cryptographic closure.
+
+What Mode 2 still doesn't prove: that the holder of the dilithium/falcon/sphincs secret keys *is* H33. Trust in the supplied pubkeys file is out-of-band — typically by checking that the pubkeys file came from H33's signed key directory for the relevant epoch.
 
 ### Signed verification reports (v0.2)
 

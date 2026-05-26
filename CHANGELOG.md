@@ -4,6 +4,77 @@ All notable changes to `h33-verify` are documented here. The crate
 adheres to [Semantic Versioning](https://semver.org); pre-1.0 minor
 versions may include behavior changes within the documented surface.
 
+## [0.3.0] — unreleased
+
+Status: feature-complete on `feat/mode-2-pq-verification`; **not yet
+tagged**. Per the project rule, v0.3.0 does not ship until a real
+production bundle + pubkeys fixture passes alongside the existing
+production receipt fixture. Self-generated test vectors verified in
+development; real fixture lands as the final commit before tag.
+
+### Added
+
+- **Mode 2 — offline PQ signature verification.** `--bundle <path>` and
+  `--pubkeys <path>` flags on `verify`. Opens the three PQ signatures
+  (ML-DSA-65, FALCON-512, SPHINCS+-SHA2-128f-simple) inside the receipt
+  offline. Asymmetric flag usage is a hard error.
+- **Bundle parser** (`src/bundle.rs`) — `h33-substrate-bundle-v1` wire
+  format. Magic `H33B`, version byte, 32-byte signing_message, three
+  len-prefixed signed_message blobs. Content-addressed by
+  `bundle_hash = SHA3-256(canonical bundle bytes)`.
+- **Pubkeys parser** (`src/pubkeys.rs`) — `h33-substrate-pubkeys-v1` JSON
+  with `epoch_id` (canonical) + `epoch` (date / human-readable),
+  algorithm name validation, hex-decoded public-key bytes.
+- **PQ verification** (`src/pq.rs`) — wraps `pqcrypto_mldsa::mldsa65`,
+  `pqcrypto_falcon::falcon512`, `pqcrypto_sphincsplus::sphincssha2128fsimple`.
+  Same crate versions as the production scif-backend signing pipeline.
+- **Mode 2 orchestration** (`src/mode2.rs`) — combines bundle parse +
+  pubkeys parse + linkage check (signing_message == on_chain_hash) +
+  three independent signature verifications.
+- **Mode 2 report** embedded into `VerificationReport.mode_2_check` and
+  propagated through the v0.2 signed-report canonical body. Overall
+  verdict is `PASS` iff Mode 1 PASS AND (Mode 2 absent OR Mode 2 PASS).
+- **Strengthened "what was proven" list when Mode 2 PASSes** — the
+  receipt is now bound to all three NIST hardness assumptions
+  simultaneously; forgery requires breaking all three.
+
+### Changed
+
+- Dependency list grows from 7 to 11. Adds `pqcrypto-mldsa`,
+  `pqcrypto-falcon`, `pqcrypto-sphincsplus`, `pqcrypto-traits` — same
+  versions as production substrate (no API surprises at production-receipt
+  swap time).
+- Binary size grows from ~5 MB to ~15-20 MB (pqcrypto C-binding overhead).
+  Still small enough for embedding in CI runners.
+
+### Documentation
+
+- **SPEC.md** — new "Mode 2 Wire Formats (v0.3)" section: bundle byte
+  layout, pubkeys JSON schema, verification procedure, what Mode 2 PASS
+  proves vs what it doesn't.
+- **THREAT_MODEL.md** — new v0.3 addition section. Mode 2 detection /
+  non-detection matrix; new trust assumptions (the three PQ crates, the
+  out-of-band trust in the pubkeys file).
+- **README.md** — new "Mode 2 — offline PQ signature verification (v0.3)"
+  section with end-to-end usage example.
+
+### Tests
+
+- **59 passing** (up from 31). 21 new lib unit tests (bundle parse +
+  pubkeys parse + three PQ algorithm roundtrips + Mode 2 orchestration +
+  tamper detection across all axes) + 4 new end-to-end CLI integration
+  tests (Mode 2 PASS path, tampered bundle FAIL, asymmetric flag
+  hard-error, no-flags backwards-compat).
+- Self-generated test vectors during development. Real production bundle
+  fixture lands in the final pre-release commit.
+
+### Not yet in v0.3 (deferred to a later release)
+
+- **Hybrid PQ verifier signing.** v0.2's Ed25519 verifier-instance
+  signing layer remains classical. Co-signing the verifier's own report
+  with Ed25519 + ML-DSA-65 will land in v0.4 or v0.3.x, alongside
+  identity-rotation tooling.
+
 ## [0.2.0] — 2026-05-26
 
 ### Added

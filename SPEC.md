@@ -309,11 +309,97 @@ Plain `h33-verify verify` (without `--signed-report`) continues to emit the
 v0.1 unsigned report format unchanged. Existing v0.1 consumers do not have
 to upgrade unless they want the signed-envelope semantics.
 
+## Mode 2 Wire Formats (v0.3)
+
+Mode 2 verifies the three PQ signatures over the substrate's `signing_message`. The verifier consumes two files:
+
+### The bundle file (`h33-substrate-bundle-v1`)
+
+Binary blob, ~21 KB, content-addressed by `bundle_hash = SHA3-256(canonical bundle bytes)`. Served by the substrate at:
+
+```
+GET /api/v1/substrate/attestations/:id/bundle
+```
+
+where `:id` is the `bundle_hash` returned in the `/attest` response.
+
+Layout (big-endian, no padding, fixed magic):
+
+```
+offset  size       field
+─────── ────────── ─────────────────────────────────────────────────────
+  0       4         magic "H33B"
+  4       1         version 0x01
+  5       3         reserved (zero)
+  8      32         signing_message (SHA3-256 of the substrate)
+ 40       4         dilithium_signed_message_len (u32 big-endian)
+ 44       L1        dilithium_signed_message    (sig || msg, pqcrypto convention)
+ ..       4         falcon_signed_message_len
+ ..       L2        falcon_signed_message
+ ..       4         sphincs_signed_message_len
+ ..       L3        sphincs_signed_message
+```
+
+Each `signed_message` blob is the concatenation of the signature followed by the 32-byte signing_message — the pqcrypto crate family's canonical `SignedMessage` format. The verifier calls `pqcrypto_*::open(signed_message, public_key)` directly.
+
+Total ≈ 21 KB for ML-DSA-65 (3309) + FALCON-512 (654) + SPHINCS+-SHA2-128f-simple (17088) + 32-byte messages and framing.
+
+### The pubkeys file (`h33-substrate-pubkeys-v1`)
+
+JSON, human-readable, published by H33 per key-generation epoch. Lists the three public keys whose signatures appear in bundles minted under that epoch.
+
+```json
+{
+  "format": "h33-substrate-pubkeys-v1",
+  "epoch_id": "h33-substrate-2026-04-11-001",
+  "epoch": "2026-04-11",
+  "issued_at_utc": "2026-04-11T00:00:00Z",
+  "algorithms": {
+    "dilithium": { "name": "ML-DSA-65",                 "public_key_hex": "..." },
+    "falcon":    { "name": "FALCON-512",                "public_key_hex": "..." },
+    "sphincs":   { "name": "SPHINCS+-SHA2-128f-simple", "public_key_hex": "..." }
+  }
+}
+```
+
+Field rules:
+
+- `format` must equal `"h33-substrate-pubkeys-v1"`.
+- `epoch_id` is the canonical identifier — opaque to consumers, stable across renames or format adjustments. Use this for trust establishment / key directory lookup.
+- `epoch` is human-readable (typically a date); informational only.
+- Algorithm `name` values are checked against `ML-DSA-65`, `FALCON-512`, and `SPHINCS+-SHA2-128f-simple` (or its FIPS 205 alias `SLH-DSA-SHA2-128f-simple`).
+
+The verifier hex-decodes each `public_key_hex` and feeds the bytes to the corresponding pqcrypto crate's `PublicKey::from_bytes`. Length is implicit — pqcrypto rejects wrong-length keys.
+
+### Mode 2 verification procedure
+
+1. Read the bundle bytes from disk; SHA3-256 → record as `bundle_hash`.
+2. Parse the bundle: check magic `H33B`, version 0x01, reserved zeros; extract signing_message + the three signed_message blobs.
+3. Read the pubkeys JSON; verify `format` tag + algorithm name strings.
+4. Confirm `bundle.signing_message == receipt.on_chain_hash`. This links the bundle to *this specific receipt*; mismatch → FAIL with reason "bundle is for a DIFFERENT receipt".
+5. `pqcrypto_mldsa::mldsa65::open(&bundle.dilithium_signed_message, &dilithium_pk)` → expect Ok(message) and `message == signing_message`.
+6. Same for FALCON-512 and SPHINCS+-SHA2-128f-simple.
+7. Mode 2 PASS iff all of (2)–(6) hold.
+
+### What a Mode 2 PASS proves
+
+In addition to the Mode 1 claims:
+
+- The ML-DSA-65 signature in the bundle was produced by the holder of the dilithium secret key paired with the supplied dilithium public key, over exactly the receipt's signing_message.
+- Same for FALCON-512 and SPHINCS+-SHA2-128f-simple.
+- The receipt is bound to all three NIST hardness assumptions (module lattices + NTRU lattices + stateless hash signatures) simultaneously. Forgery requires breaking all three.
+
+### What a Mode 2 PASS still does NOT prove
+
+- Whether the entity that holds the three PQ secret keys *is* H33. That is an out-of-band relationship — the verifier consumed the pubkeys file you supplied. Trust in those keys (e.g. that they came from H33's signed key directory for the relevant epoch) lives one layer above this protocol.
+- Liveness, recency, or revocation.
+- Computation correctness — the substrate commits to a hash, not to the truth of the FHE computation that produced it.
+
 ## Versioning
 
 | h33-verify version | H33 Signing Substrate Spec | Notes |
 |--------------------|---------------------------|-------|
 | 0.1.x              | v1                        | Mode 1 deterministic verification only. No PQ signature check, no signed reports. |
 | 0.2.x              | v1                        | Adds Ed25519-signed verification reports. Mode 1 only on the receipt side. |
-| 0.3.x (planned)    | v1                        | Adds Mode 2 — accepts user-supplied PQ signature bundle + epoch public keys, verifies Dilithium + FALCON + SPHINCS+ offline. Hybrid Ed25519+ML-DSA verifier signing co-lands. |
+| 0.3.x              | v1                        | Adds Mode 2 — accepts user-supplied PQ signature bundle (`h33-substrate-bundle-v1`) + epoch public keys (`h33-substrate-pubkeys-v1`), verifies ML-DSA-65 + FALCON-512 + SPHINCS+-SHA2-128f-simple offline. |
 | 1.0.x (planned)    | v1                        | Stable surface for ecosystem use. SDK bindings in TypeScript and Python. |

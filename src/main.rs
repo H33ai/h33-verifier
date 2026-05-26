@@ -53,6 +53,15 @@ enum Command {
         /// verifies that SHA3-256(payload) equals the substrate's fhe_commitment field.
         #[arg(long)]
         data: Option<PathBuf>,
+        /// Mode 2: path to the h33-substrate-bundle-v1 file. Must be supplied
+        /// together with --pubkeys; supplying one without the other is a
+        /// hard error (Mode 2 inputs are not independently meaningful).
+        #[arg(long)]
+        bundle: Option<PathBuf>,
+        /// Mode 2: path to the h33-substrate-pubkeys-v1 JSON file. Must be
+        /// supplied together with --bundle.
+        #[arg(long)]
+        pubkeys: Option<PathBuf>,
         /// Wrap the report in an Ed25519-signed envelope using this
         /// verifier instance's keypair. Generates a keypair on first use.
         #[arg(long)]
@@ -98,8 +107,15 @@ struct ReceiptInput {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
-        Command::Verify { receipt, data, signed_report, identity } => {
-            run_verify(&receipt, data.as_deref(), signed_report, identity.as_deref())
+        Command::Verify { receipt, data, bundle, pubkeys, signed_report, identity } => {
+            run_verify(
+                &receipt,
+                data.as_deref(),
+                bundle.as_deref(),
+                pubkeys.as_deref(),
+                signed_report,
+                identity.as_deref(),
+            )
         }
         Command::Inspect { receipt } => run_inspect(&receipt),
         Command::Keygen { identity, force } => run_keygen(identity.as_deref(), force),
@@ -111,9 +127,17 @@ fn main() -> ExitCode {
 fn run_verify(
     receipt_path: &std::path::Path,
     data_path: Option<&std::path::Path>,
+    bundle_path: Option<&std::path::Path>,
+    pubkeys_path: Option<&std::path::Path>,
     signed: bool,
     identity_path: Option<&std::path::Path>,
 ) -> ExitCode {
+    // Mode 2 flag pair must be symmetric — neither (Mode 1 only) or both.
+    match (bundle_path, pubkeys_path) {
+        (Some(_), None) => return die("--bundle requires --pubkeys (Mode 2 inputs must be supplied together)"),
+        (None, Some(_)) => return die("--pubkeys requires --bundle (Mode 2 inputs must be supplied together)"),
+        _ => {}
+    }
     let input = match load_receipt(receipt_path) {
         Ok(v) => v,
         Err(e) => return die(&format!("could not read receipt: {e}")),
@@ -141,12 +165,33 @@ fn run_verify(
     };
     let data_borrow = data_pair.as_ref().map(|(b, p)| (b.as_slice(), p.clone()));
 
+    // Mode 2 inputs (only when both flags supplied, validated above)
+    let bundle_bytes_opt: Option<Vec<u8>> = match bundle_path {
+        Some(p) => match fs::read(p) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => return die(&format!("could not read --bundle file: {e}")),
+        },
+        None => None,
+    };
+    let pubkeys_json_opt: Option<String> = match pubkeys_path {
+        Some(p) => match fs::read_to_string(p) {
+            Ok(s) => Some(s),
+            Err(e) => return die(&format!("could not read --pubkeys file: {e}")),
+        },
+        None => None,
+    };
+    let mode2_borrow = match (&bundle_bytes_opt, &pubkeys_json_opt) {
+        (Some(b), Some(p)) => Some((b.as_slice(), p.as_str())),
+        _ => None,
+    };
+
     let verify_input = VerifyInput {
         receipt_path_display: receipt_path.display().to_string(),
         on_chain_hash: &on_chain_hash_bytes,
         receipt_bytes: &receipt_bytes,
         substrate_bytes: &substrate_bytes,
         data: data_borrow,
+        mode2: mode2_borrow,
     };
 
     let report = verify_receipt(&verify_input);

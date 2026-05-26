@@ -1,8 +1,8 @@
 [package]
 name = "h33-verify"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Independent offline verifier for H33-74 substrate receipts. v0.2 adds verifier-signed verification reports (Ed25519). Mode 1 deterministic only; Mode 2 PQ-signature verification lands in v0.3."
+description = "Independent offline verifier for H33-74 substrate receipts. Mode 1 (SHA3 commitment binding) + Mode 2 (offline ML-DSA-65 + FALCON-512 + SPHINCS+-SHA2-128f signature verification) + Ed25519-signed verifier reports. No network, no H33 dependency."
 authors = ["H33 / community"]
 license = "Apache-2.0"
 repository = "https://github.com/H33ai/h33-verifier"
@@ -25,9 +25,16 @@ serde_json = "1.0"
 hex = "0.4"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
+# Mode 2 PQ signature verification. Same crate versions as the production
+# scif-backend signing pipeline so verifier opens production-issued sigs
+# bit-for-bit.
+pqcrypto-mldsa = "0.1"          # ML-DSA-65 (FIPS 204 / Dilithium3)
+pqcrypto-falcon = "0.3"         # FALCON-512
+pqcrypto-sphincsplus = "0.7"    # SLH-DSA-SHA2-128f-simple (FIPS 205)
+pqcrypto-traits = "0.3"
 
 [dev-dependencies]
-# none — fixtures are .json files, asserts are stdlib
+# none — test vectors generate keypairs via the same pqcrypto crates listed above
 
 [profile.release]
 opt-level = 3

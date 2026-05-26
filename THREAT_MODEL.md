@@ -157,9 +157,57 @@ out-of-band. Use rotation when:
 
 There is no automatic rotation in v0.2.
 
+## v0.3 addition: Mode 2 PQ signature verification
+
+v0.3 closes the "binds to H33" gap on the input side: given user-supplied
+bundle bytes and a pubkeys JSON file, the verifier opens all three PQ
+signatures inside the receipt offline.
+
+### What Mode 2 detects
+
+| Threat | How |
+|--------|-----|
+| Receipt forged with synthetic on_chain_hash (no real H33 signing) | All three PQ signatures fail to open against the supplied pubkeys → FAIL |
+| Bundle substituted for a different receipt | `bundle.signing_message != receipt.on_chain_hash` → FAIL with "bundle is for a DIFFERENT receipt" |
+| Single signature tampered (e.g., bit flip in dilithium blob) | That algorithm's `open()` fails; the other two still succeed; verdict FAIL with specific algorithm named |
+| Wrong pubkeys file supplied (e.g., from a different epoch) | All three signatures fail against the wrong keys → FAIL |
+| Bundle magic / version / reserved tampered | Decode-time error before any crypto runs → FAIL |
+
+### What Mode 2 does NOT detect (and the rationale)
+
+- **Whether the holder of the PQ secret keys is actually H33.** The
+  verifier consumed the pubkeys file you supplied. If you supplied a
+  pubkeys file you found in a parking lot, the signatures verify against
+  those keys — Mode 2 cannot tell H33's keys from any other keys. Trust
+  in pubkeys is out-of-band, typically via a signed key directory H33
+  publishes and rotates.
+- **Whether the keys have been compromised since the receipt was signed.**
+  Mode 2 cannot distinguish "valid at signing time" from "key currently
+  exposed." Out-of-band revocation lists and epoch rotation are the
+  application-layer fix.
+- **Replay / liveness.** Mode 2 PASS is timeless. The same bundle +
+  pubkeys + receipt will PASS forever. If the receipt's semantic meaning
+  is bound to a moment in time, that's an application-layer concern.
+
+### Trust assumptions added by v0.3
+
+Running `h33-verify verify --bundle --pubkeys` adds these to the v0.1+v0.2
+list:
+
+1. **ML-DSA-65 (FIPS 204), FALCON-512, and SPHINCS+-SHA2-128f-simple
+   (FIPS 205 / SLH-DSA).** Three NIST-finalized PQ signature schemes,
+   used via the RustCrypto-adjacent `pqcrypto-*` crate family. Same
+   versions as the production substrate signing pipeline.
+2. **The `pqcrypto-mldsa`, `pqcrypto-falcon`, `pqcrypto-sphincsplus`,
+   `pqcrypto-traits` crates.** All maintained by the PQClean project,
+   tracking NIST KAT vectors. Audit dependency tree if your threat model
+   includes supply-chain compromise.
+3. **You trust the pubkeys file you fed in.** This is the most important
+   addition — see "does NOT detect" above. Establish out-of-band that the
+   pubkeys are H33's actual epoch keys for the relevant epoch.
+
 ## Document scope
 
-This threat model covers `h33-verify` v0.1.x + v0.2.x. It will be updated
-when v0.3 (Mode 2 PQ verification of input + hybrid PQ verifier signing)
-lands, and again on each major version. See [BOUNDARY.md](./BOUNDARY.md)
-for the public-vs-proprietary surface delineation.
+This threat model covers `h33-verify` v0.1.x + v0.2.x + v0.3.x. It will
+be updated on each major version. See [BOUNDARY.md](./BOUNDARY.md) for
+the public-vs-proprietary surface delineation.
