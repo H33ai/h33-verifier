@@ -48,6 +48,7 @@ pub const TOTAL_FOOTPRINT: usize = SUBSTRATE_SIZE - 16 /* nonce */ + 32 /* signi
 /// signature that used the old meaning).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComputationType {
+    // Original registry (0x01-0x0B)
     BiometricAuth,     // 0x01
     FraudScore,        // 0x02
     FedNowPayment,     // 0x03
@@ -59,7 +60,45 @@ pub enum ComputationType {
     ArchiveSign,       // 0x09
     MedVaultPhi,       // 0x0A
     VaultKeyOp,        // 0x0B
-    GenericFhe,        // 0xFF
+
+    // API attestation (0x0C)
+    ApiResponse, // 0x0C
+
+    // AI / media / legal (0x0D-0x0F)
+    AiInference,      // 0x0D
+    CaptureTimeMedia, // 0x0E
+    LegalEvidence,    // 0x0F
+
+    // Document / lending / auth (0x10-0x18)
+    DocumentVersion,    // 0x10
+    LoanApplication,    // 0x11
+    MedicalArbitration, // 0x12
+    AuthEvent,          // 0x13
+    DasAssetResponse,   // 0x14
+    CacheConfig,        // 0x15
+    FinancialData,      // 0x16
+    FitnessMetric,      // 0x17
+    SbaForm,            // 0x18
+
+    // Streaming / webhook (0x1E-0x1F)
+    WebhookFrame,  // 0x1E
+    StreamSegment, // 0x1F
+
+    // Batch Merkle aggregation (0x20)
+    MerkleBatchRoot, // 0x20
+
+    // Polygon chain anchors (0x21-0x22)
+    PolygonAnchor,      // 0x21
+    PolygonZkEvmAnchor, // 0x22
+
+    // H33-Solana-Shield (0x60-0x63)
+    ShieldIdentity,   // 0x60
+    ShieldCompliance, // 0x61
+    ShieldBalance,    // 0x62
+    ShieldDeFi,       // 0x63
+
+    // Catch-all (0xFF)
+    GenericFhe, // 0xFF
 }
 
 impl ComputationType {
@@ -76,6 +115,28 @@ impl ComputationType {
             0x09 => Self::ArchiveSign,
             0x0A => Self::MedVaultPhi,
             0x0B => Self::VaultKeyOp,
+            0x0C => Self::ApiResponse,
+            0x0D => Self::AiInference,
+            0x0E => Self::CaptureTimeMedia,
+            0x0F => Self::LegalEvidence,
+            0x10 => Self::DocumentVersion,
+            0x11 => Self::LoanApplication,
+            0x12 => Self::MedicalArbitration,
+            0x13 => Self::AuthEvent,
+            0x14 => Self::DasAssetResponse,
+            0x15 => Self::CacheConfig,
+            0x16 => Self::FinancialData,
+            0x17 => Self::FitnessMetric,
+            0x18 => Self::SbaForm,
+            0x1E => Self::WebhookFrame,
+            0x1F => Self::StreamSegment,
+            0x20 => Self::MerkleBatchRoot,
+            0x21 => Self::PolygonAnchor,
+            0x22 => Self::PolygonZkEvmAnchor,
+            0x60 => Self::ShieldIdentity,
+            0x61 => Self::ShieldCompliance,
+            0x62 => Self::ShieldBalance,
+            0x63 => Self::ShieldDeFi,
             0xFF => Self::GenericFhe,
             _ => return None,
         })
@@ -94,6 +155,28 @@ impl ComputationType {
             Self::ArchiveSign => "ArchiveSign",
             Self::MedVaultPhi => "MedVaultPhi",
             Self::VaultKeyOp => "VaultKeyOp",
+            Self::ApiResponse => "ApiResponse",
+            Self::AiInference => "AiInference",
+            Self::CaptureTimeMedia => "CaptureTimeMedia",
+            Self::LegalEvidence => "LegalEvidence",
+            Self::DocumentVersion => "DocumentVersion",
+            Self::LoanApplication => "LoanApplication",
+            Self::MedicalArbitration => "MedicalArbitration",
+            Self::AuthEvent => "AuthEvent",
+            Self::DasAssetResponse => "DasAssetResponse",
+            Self::CacheConfig => "CacheConfig",
+            Self::FinancialData => "FinancialData",
+            Self::FitnessMetric => "FitnessMetric",
+            Self::SbaForm => "SbaForm",
+            Self::WebhookFrame => "WebhookFrame",
+            Self::StreamSegment => "StreamSegment",
+            Self::MerkleBatchRoot => "MerkleBatchRoot",
+            Self::PolygonAnchor => "PolygonAnchor",
+            Self::PolygonZkEvmAnchor => "PolygonZkEvmAnchor",
+            Self::ShieldIdentity => "ShieldIdentity",
+            Self::ShieldCompliance => "ShieldCompliance",
+            Self::ShieldBalance => "ShieldBalance",
+            Self::ShieldDeFi => "ShieldDeFi",
             Self::GenericFhe => "GenericFhe",
         }
     }
