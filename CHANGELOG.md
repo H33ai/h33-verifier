@@ -1,3 +1,18 @@
+## [0.3.0] — 2026-06-10
+
+### Added
+- **`attest` subcommand** — verify a target against the H33-PQ Verified standard. Walks an attestation manifest (`--manifest <path-or-url>`), fetches every per-pillar bundle, validates schema_version + structural shape, computes SHA3-384 over each bundle, and emits a per-pillar PASS/PENDING/FAIL verdict plus an overall verdict (PASS / PARTIAL / PENDING / FAIL).
+- URLs in `--manifest` and bundle_url fields are fetched via the system `curl` binary as a subprocess (preserves the v0.2 "no network call from the binary" posture; the binary itself remains dependency-light).
+- Placeholder bundles (with `_status: PENDING_*` markers) are detected and treated as consistent with PREPARING manifest status, inconsistent with VERIFIED manifest status.
+
+### Smoke test
+Verified end-to-end against the deployed H33 self-attestation manifest at
+`https://h33.ai/standards/post-quantum-verified/h33-self-attestation/bundles/manifest.json`:
+- Pillar 4 (Independent Verification) → PASS
+- Pillar 5 (Post-Quantum Security) → PASS
+- Pillars 1-3 → PENDING (placeholders detected, consistent with manifest)
+- overall → PARTIAL (2 of 5 VERIFIED)
+
 # Changelog
 
 All notable changes to `h33-verify` are documented here. The crate

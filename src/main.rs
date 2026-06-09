@@ -86,6 +86,20 @@ enum Command {
         /// Path to the signed report JSON.
         report: PathBuf,
     },
+    /// Attest a target against the H33-PQ Verified standard. Walks the target's
+    /// attestation manifest, fetches every pillar bundle named, structurally
+    /// validates each, and emits a per-pillar report with an overall verdict.
+    /// `--manifest` accepts a local path, file:// URL, or http(s):// URL
+    /// (URLs are fetched via the system `curl` binary as a subprocess).
+    Attest {
+        /// Path or URL to the attestation manifest (typically
+        /// https://h33.ai/standards/post-quantum-verified/h33-self-attestation/bundles/manifest.json).
+        #[arg(long)]
+        manifest: String,
+        /// Optional output path for the JSON report; defaults to stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +119,44 @@ fn main() -> ExitCode {
         Command::Keygen { identity, force } => run_keygen(identity.as_deref(), force),
         Command::Identity { identity } => run_identity(identity.as_deref()),
         Command::VerifyReport { report } => run_verify_report(&report),
+        Command::Attest { manifest, output } => run_attest_cmd(&manifest, output.as_deref()),
+    }
+}
+
+fn run_attest_cmd(manifest: &str, output: Option<&std::path::Path>) -> ExitCode {
+    use h33_verify::attest::run_attest;
+    match run_attest(manifest, env!("CARGO_PKG_VERSION")) {
+        Ok((report, ok)) => {
+            let json = match serde_json::to_string_pretty(&report) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("attest: report serialization failed: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            if let Some(p) = output {
+                if let Err(e) = std::fs::write(p, &json) {
+                    eprintln!("attest: failed to write {}: {e}", p.display());
+                    return ExitCode::from(2);
+                }
+                eprintln!(
+                    "attest: report written to {} — overall: {}",
+                    p.display(),
+                    report.overall
+                );
+            } else {
+                println!("{json}");
+            }
+            if ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
+        }
+        Err(e) => {
+            eprintln!("attest: {e}");
+            ExitCode::from(2)
+        }
     }
 }
 

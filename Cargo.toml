@@ -1,8 +1,8 @@
 [package]
 name = "h33-verify"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
-description = "Independent offline verifier for H33-74 substrate receipts. v0.2 adds verifier-signed verification reports (Ed25519). Mode 1 deterministic only; Mode 2 PQ-signature verification lands in v0.3."
+description = "Independent offline verifier for H33-74 substrate receipts. v0.3 adds the `attest` subcommand for the H33-PQ Verified standard — walks an attestation manifest, validates per-pillar bundles, emits an overall verdict report. v0.2 added Ed25519-signed verification reports."
 authors = ["H33 / community"]
 license = "Apache-2.0"
 repository = "https://github.com/H33ai/h33-verifier"

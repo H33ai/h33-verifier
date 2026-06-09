@@ -28,6 +28,7 @@
 
 use sha3::{Digest, Sha3_256};
 
+pub mod attest;
 pub mod canonical;
 pub mod identity;
 pub mod report;
